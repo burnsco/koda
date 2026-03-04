@@ -1,0 +1,67 @@
+services:
+  media:
+    image: bluenviron/mediamtx:1.9.3
+    restart: unless-stopped
+    ports:
+      - "1935:1935"
+    expose:
+      - "8888"
+    volumes:
+      - ./infra/mediamtx.yml:/mediamtx.yml:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      KODA_HOST: 0.0.0.0
+      KODA_PORT: 8080
+      KODA_CORS_ORIGIN: https://${APP_DOMAIN}
+      KODA_MEDIA_RTMP_BASE_URL: rtmp://${INGEST_DOMAIN}:1935/live
+      KODA_MEDIA_HLS_BASE_URL: https://${PLAY_DOMAIN}/live
+    depends_on:
+      - media
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_HTTP_URL: https://${API_DOMAIN}
+        NEXT_PUBLIC_BACKEND_WS_URL: wss://${API_DOMAIN}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_BACKEND_HTTP_URL: https://${API_DOMAIN}
+      NEXT_PUBLIC_BACKEND_WS_URL: wss://${API_DOMAIN}
+      NODE_ENV: production
+    depends_on:
+      - backend
+    expose:
+      - "3000"
+
+  proxy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+      - media
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      PLAY_DOMAIN: ${PLAY_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

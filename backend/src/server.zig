@@ -72,7 +72,18 @@ pub const KodaServer = struct {
         _ = try chat.sendMessage(lobby.id, "system", "Koda backend is online.");
 
         var streams = self.app.streamService();
-        _ = try streams.startStream(stage.id, "system", "Welcome to Koda");
+        const seed_key = try self.generateStreamKey();
+        defer self.allocator.free(seed_key);
+        const seed_playback_url = try self.buildPlaybackUrl(seed_key);
+        defer self.allocator.free(seed_playback_url);
+        _ = try streams.startStream(
+            stage.id,
+            "system",
+            "Welcome to Koda",
+            seed_key,
+            self.config.media_rtmp_base_url,
+            seed_playback_url,
+        );
 
         var voice = self.app.voiceService();
         try voice.joinVoice(stage.id, "system");
@@ -361,6 +372,8 @@ pub const KodaServer = struct {
         const StreamStart = struct {
             room_id: []const u8,
             title: []const u8,
+            ingest_server_url: ?[]const u8 = null,
+            stream_key: ?[]const u8 = null,
         };
 
         var parsed = try std.json.parseFromSlice(StreamStart, self.allocator, body, .{ .ignore_unknown_fields = true });
@@ -368,18 +381,51 @@ pub const KodaServer = struct {
 
         const room_id = std.mem.trim(u8, parsed.value.room_id, " \t\r\n");
         const title = std.mem.trim(u8, parsed.value.title, " \t\r\n");
+        const ingest_server_url_input = std.mem.trim(u8, parsed.value.ingest_server_url orelse "", " \t\r\n");
+        const stream_key_input = std.mem.trim(u8, parsed.value.stream_key orelse "", " \t\r\n");
 
         if (room_id.len == 0 or title.len == 0) {
             return error.InvalidStreamStart;
         }
 
+        if ((ingest_server_url_input.len > 0) != (stream_key_input.len > 0)) {
+            return error.InvalidObsConfig;
+        }
+        if (stream_key_input.len > 0 and !isValidStreamKey(stream_key_input)) {
+            return error.InvalidObsConfig;
+        }
+        if (ingest_server_url_input.len > 0 and !isValidIngestServerUrl(ingest_server_url_input)) {
+            return error.InvalidObsConfig;
+        }
+
+        const stream_key = if (stream_key_input.len > 0)
+            try self.allocator.dupe(u8, stream_key_input)
+        else
+            try self.generateStreamKey();
+        defer self.allocator.free(stream_key);
+
+        const ingest_server_url = if (ingest_server_url_input.len > 0)
+            ingest_server_url_input
+        else
+            self.config.media_rtmp_base_url;
+        const playback_url = try self.buildPlaybackUrl(stream_key);
+        defer self.allocator.free(playback_url);
+
         self.state_mutex.lock();
         defer self.state_mutex.unlock();
 
         var streams = self.app.streamService();
-        const stream = try streams.startStream(room_id, user_id, title);
+        streams.stopLiveStreamsInRoom(room_id);
+        const stream = try streams.startStream(
+            room_id,
+            user_id,
+            title,
+            stream_key,
+            ingest_server_url,
+            playback_url,
+        );
         self.notifyUpdate();
-        return try self.buildStreamJson(stream);
+        return try self.buildStreamJson(stream, true);
     }
 
     fn handleStopStream(self: *KodaServer, request: *http.Server.Request) ![]u8 {
@@ -413,7 +459,7 @@ pub const KodaServer = struct {
 
         for (self.app.state.streams.items) |stream| {
             if (std.mem.eql(u8, stream.id, stream_id)) {
-                return try self.buildStreamJson(stream);
+                return try self.buildStreamJson(stream, false);
             }
         }
 
@@ -668,7 +714,7 @@ pub const KodaServer = struct {
         try writer.writeByte('[');
         for (self.app.state.streams.items, 0..) |stream, idx| {
             if (idx != 0) try writer.writeByte(',');
-            try self.writeStreamObject(&writer, stream);
+            try self.writeStreamObject(&writer, stream, false);
         }
         try writer.writeByte(']');
 
@@ -698,12 +744,12 @@ pub const KodaServer = struct {
         return try out.toOwnedSlice(self.allocator);
     }
 
-    fn buildStreamJson(self: *KodaServer, stream: store.StreamSession) ![]u8 {
+    fn buildStreamJson(self: *KodaServer, stream: store.StreamSession, include_obs_credentials: bool) ![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
 
         var writer = out.writer(self.allocator);
-        try self.writeStreamObject(&writer, stream);
+        try self.writeStreamObject(&writer, stream, include_obs_credentials);
         return try out.toOwnedSlice(self.allocator);
     }
 
@@ -756,8 +802,7 @@ pub const KodaServer = struct {
         try writer.writeByte('}');
     }
 
-    fn writeStreamObject(self: *KodaServer, writer: anytype, stream: store.StreamSession) !void {
-        _ = self;
+    fn writeStreamObject(self: *KodaServer, writer: anytype, stream: store.StreamSession, include_obs_credentials: bool) !void {
         try writer.writeByte('{');
         try writer.writeAll("\"id\":");
         try writeJsonString(writer, stream.id);
@@ -767,8 +812,42 @@ pub const KodaServer = struct {
         try writeJsonString(writer, stream.host_user_id);
         try writer.writeAll(",\"title\":");
         try writeJsonString(writer, stream.title);
+        try writer.writeAll(",\"playback_url\":");
+        try writeJsonString(writer, stream.playback_url);
         try writer.print(",\"live\":{s}", .{if (stream.live) "true" else "false"});
+
+        if (include_obs_credentials) {
+            const ingest_url = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{
+                trimTrailingSlashes(stream.ingest_server_url),
+                stream.stream_key,
+            });
+            defer self.allocator.free(ingest_url);
+
+            try writer.writeAll(",\"obs\":{");
+            try writer.writeAll("\"server_url\":");
+            try writeJsonString(writer, stream.ingest_server_url);
+            try writer.writeAll(",\"stream_key\":");
+            try writeJsonString(writer, stream.stream_key);
+            try writer.writeAll(",\"ingest_url\":");
+            try writeJsonString(writer, ingest_url);
+            try writer.writeByte('}');
+        }
+
         try writer.writeByte('}');
+    }
+
+    fn generateStreamKey(self: *KodaServer) ![]u8 {
+        var bytes: [18]u8 = undefined;
+        std.crypto.random.bytes(&bytes);
+        const hex = std.fmt.bytesToHex(bytes, .lower);
+        return try self.allocator.dupe(u8, &hex);
+    }
+
+    fn buildPlaybackUrl(self: *KodaServer, stream_key: []const u8) ![]u8 {
+        return std.fmt.allocPrint(self.allocator, "{s}/{s}/index.m3u8", .{
+            trimTrailingSlashes(self.config.media_hls_base_url),
+            stream_key,
+        });
     }
 
     fn notifyUpdate(self: *KodaServer) void {
@@ -811,8 +890,14 @@ pub const KodaServer = struct {
             error.InvalidRegistration => self.respondText(request, .bad_request, "username, email, and password are required"),
             error.InvalidLogin => self.respondText(request, .bad_request, "email and password are required"),
             error.InvalidJson => self.respondText(request, .bad_request, "invalid json payload"),
+            error.InvalidRoomName => self.respondText(request, .bad_request, "room name is required"),
+            error.InvalidMessage => self.respondText(request, .bad_request, "room_id and body are required"),
+            error.InvalidStreamStart => self.respondText(request, .bad_request, "room_id and title are required"),
+            error.InvalidObsConfig => self.respondText(request, .bad_request, "provide both OBS server and stream key (valid RTMP URL and key format)"),
+            error.InvalidStreamId => self.respondText(request, .bad_request, "stream_id is required"),
             error.UsernameTaken => self.respondText(request, .conflict, "username already taken"),
             error.EmailTaken => self.respondText(request, .conflict, "email already registered"),
+            error.StreamNotFound => self.respondText(request, .not_found, "stream not found"),
             error.InvalidPassword, error.UserNotFound => self.respondText(request, .unauthorized, "invalid email or password"),
             error.InvalidToken, error.UnauthorizedUser => self.respondText(request, .unauthorized, "invalid or expired session"),
             error.MissingContentLength => self.respondText(request, .length_required, "content-length header is required"),
@@ -958,6 +1043,29 @@ fn parseRoomKind(raw: []const u8) types.RoomKind {
     return .text;
 }
 
+fn isValidIngestServerUrl(value: []const u8) bool {
+    return std.mem.startsWith(u8, value, "rtmp://") or std.mem.startsWith(u8, value, "rtmps://");
+}
+
+fn isValidStreamKey(value: []const u8) bool {
+    if (value.len == 0 or value.len > 128) return false;
+
+    for (value) |c| {
+        if (std.ascii.isAlphanumeric(c) or c == '_' or c == '-' or c == '.') {
+            continue;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+fn trimTrailingSlashes(value: []const u8) []const u8 {
+    var end = value.len;
+    while (end > 0 and value[end - 1] == '/') : (end -= 1) {}
+    return value[0..end];
+}
+
 fn roomKindString(kind: types.RoomKind) []const u8 {
     return switch (kind) {
         .text => "text",
@@ -1012,6 +1120,19 @@ test "parseRoomKind is case-insensitive and defaults to text" {
     try std.testing.expectEqual(types.RoomKind.video, parseRoomKind("VIDEO"));
     try std.testing.expectEqual(types.RoomKind.stream, parseRoomKind("stream"));
     try std.testing.expectEqual(types.RoomKind.text, parseRoomKind("unknown"));
+}
+
+test "isValidIngestServerUrl only accepts rtmp schemes" {
+    try std.testing.expect(isValidIngestServerUrl("rtmp://localhost:1935/live"));
+    try std.testing.expect(isValidIngestServerUrl("rtmps://ingest.example.com/live"));
+    try std.testing.expect(!isValidIngestServerUrl("http://localhost/live"));
+}
+
+test "isValidStreamKey allows safe key characters only" {
+    try std.testing.expect(isValidStreamKey("abc123_-."));
+    try std.testing.expect(!isValidStreamKey(""));
+    try std.testing.expect(!isValidStreamKey("a/b"));
+    try std.testing.expect(!isValidStreamKey("space key"));
 }
 
 test "writeJsonString escapes control and quote characters" {

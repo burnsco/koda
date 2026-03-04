@@ -20,6 +20,9 @@ pub const StreamSession = struct {
     room_id: []const u8,
     host_user_id: []const u8,
     title: []const u8,
+    stream_key: []const u8,
+    ingest_server_url: []const u8,
+    playback_url: []const u8,
     live: bool,
 };
 
@@ -102,6 +105,9 @@ pub const State = struct {
             allocator.free(stream.room_id);
             allocator.free(stream.host_user_id);
             allocator.free(stream.title);
+            allocator.free(stream.stream_key);
+            allocator.free(stream.ingest_server_url);
+            allocator.free(stream.playback_url);
         }
         self.streams.deinit(allocator);
 

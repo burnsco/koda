@@ -25,7 +25,18 @@ export type StreamSession = {
   room_id: string;
   host_user_id: string;
   title: string;
+  playback_url: string;
   live: boolean;
+};
+
+export type StreamObsConfig = {
+  server_url: string;
+  stream_key: string;
+  ingest_url: string;
+};
+
+export type StreamStartResponse = StreamSession & {
+  obs: StreamObsConfig;
 };
 
 export type ChatMessage = {

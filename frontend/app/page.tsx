@@ -1,5 +1,6 @@
 "use client";
 
+import Hls from "hls.js";
 import { Hash, MessageSquare, Radio, Video as VideoIcon } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -21,7 +22,9 @@ import {
   Room,
   RoomKind,
   SignalPayload,
+  StreamObsConfig,
   StreamSession,
+  StreamStartResponse,
 } from "./types";
 
 const HTTP_BASE = process.env.NEXT_PUBLIC_BACKEND_HTTP_URL ?? "http://localhost:8080";
@@ -69,8 +72,6 @@ export default function Home() {
   const chatSocketRef = useRef<WebSocket | null>(null);
   const signalSocketRef = useRef<WebSocket | null>(null);
 
-  const streamLocalVideoRef = useRef<HTMLVideoElement | null>(null);
-  const streamPreviewVideoRef = useRef<HTMLVideoElement | null>(null);
   const streamRemoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoLocalVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -104,9 +105,12 @@ export default function Home() {
   const [streamTitleDraft, setStreamTitleDraft] = useState("My Koda Stream");
   const [streamMode, setStreamMode] = useState<"idle" | "hosting" | "watching">("idle");
   const [streamLocalMedia, setStreamLocalMedia] = useState<MediaStream | null>(null);
-  const [streamRemoteMedia, setStreamRemoteMedia] = useState<MediaStream | null>(null);
+  const [streamPlaybackUrl, setStreamPlaybackUrl] = useState<string | null>(null);
   const [hostedStreamId, setHostedStreamId] = useState<string | null>(null);
   const [knownStreamHostId, setKnownStreamHostId] = useState<string | null>(null);
+  const [streamObsConfig, setStreamObsConfig] = useState<StreamObsConfig | null>(null);
+  const [streamObsServerDraft, setStreamObsServerDraft] = useState("");
+  const [streamObsKeyDraft, setStreamObsKeyDraft] = useState("");
   const [streamViewerIds, setStreamViewerIds] = useState<string[]>([]);
 
   const [videoJoined, setVideoJoined] = useState(false);
@@ -317,19 +321,6 @@ export default function Home() {
     socket.send(JSON.stringify(payload));
   }
 
-  function sendStreamViewerLeave(): void {
-    if (streamModeRef.current !== "watching") {
-      return;
-    }
-
-    sendSignal({
-      kind: "peer.leave",
-      mode: "stream",
-      role: "viewer",
-      target_user_id: knownStreamHostIdRef.current ?? undefined,
-    });
-  }
-
   function makePeerConnection(
     mode: "stream" | "video",
     remoteUserId: string,
@@ -373,7 +364,6 @@ export default function Home() {
       }
 
       if (mode === "stream") {
-        setStreamRemoteMedia(incoming);
         setStreamMode((current) => (current === "hosting" ? current : "watching"));
         return;
       }
@@ -459,20 +449,36 @@ export default function Home() {
       return;
     }
 
-    let media: MediaStream | null = null;
+    const customServer = streamObsServerDraft.trim();
+    const customStreamKey = streamObsKeyDraft.trim();
+    if (customServer.length > 0 !== customStreamKey.length > 0) {
+      setStatusNote("Enter both OBS server and stream key, or leave both blank.");
+      return;
+    }
 
     try {
-      media = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-
       closeAllStreamPeers();
       clearStreamViewers();
-      setStreamRemoteMedia(null);
-      setStreamLocalMedia(media);
+      setStreamLocalMedia(null);
+      setStreamPlaybackUrl(null);
+      setStreamObsConfig(null);
       setStreamMode("hosting");
       setKnownStreamHostId(userId);
+
+      const payload: {
+        room_id: string;
+        title: string;
+        ingest_server_url?: string;
+        stream_key?: string;
+      } = {
+        room_id: activeRoom.id,
+        title: streamTitleDraft.trim() || "Live on Koda",
+      };
+
+      if (customServer.length > 0) {
+        payload.ingest_server_url = customServer;
+        payload.stream_key = customStreamKey;
+      }
 
       const response = await fetch(`${HTTP_BASE}/api/streams`, {
         method: "POST",
@@ -480,40 +486,32 @@ export default function Home() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${sessionToken}`,
         },
-        body: JSON.stringify({
-          room_id: activeRoom.id,
-          title: streamTitleDraft.trim() || "Live on Koda",
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         throw new Error("failed to start stream");
       }
 
-      const session = (await response.json()) as StreamSession;
+      const session = (await response.json()) as StreamStartResponse;
       setHostedStreamId(session.id);
-      setStatusNote("Broadcast is live.");
-      sendSignal({ kind: "peer.announce", mode: "stream", role: "host" });
-      sendSignal({
-        kind: "stream.status",
-        mode: "stream",
-        is_live: true,
-        title: session.title,
-      });
+      setStreamPlaybackUrl(session.playback_url);
+      setStreamObsConfig(session.obs);
+      setStreamObsServerDraft(session.obs.server_url);
+      setStreamObsKeyDraft(session.obs.stream_key);
+      setStatusNote("Broadcast created. Start streaming from OBS with the shown credentials.");
 
       await fetchStreams();
     } catch {
-      setStatusNote("Could not access camera/mic for stream broadcasting.");
+      setStatusNote("Could not create stream session.");
       setStreamMode("idle");
-      stopMediaStream(media ?? streamLocalMediaRef.current);
       setStreamLocalMedia(null);
+      setStreamObsConfig(null);
+      setStreamPlaybackUrl(null);
     }
   }
 
   async function stopBroadcast(notify = true): Promise<void> {
-    sendSignal({ kind: "peer.leave", mode: "stream", role: "host" });
-    sendSignal({ kind: "stream.status", mode: "stream", is_live: false });
-
     const streamId = hostedStreamIdRef.current;
     if (streamId) {
       await fetch(`${HTTP_BASE}/api/streams/stop`, {
@@ -532,7 +530,8 @@ export default function Home() {
     clearStreamViewers();
     stopMediaStream(streamLocalMediaRef.current);
     setStreamLocalMedia(null);
-    setStreamRemoteMedia(null);
+    setStreamPlaybackUrl(null);
+    setStreamObsConfig(null);
     setHostedStreamId(null);
     setKnownStreamHostId(null);
     setStreamMode("idle");
@@ -594,9 +593,6 @@ export default function Home() {
 
   function resetRoomRealtimeState(): void {
     if (streamModeRef.current === "hosting") {
-      sendSignal({ kind: "peer.leave", mode: "stream", role: "host" });
-      sendSignal({ kind: "stream.status", mode: "stream", is_live: false });
-
       const streamId = hostedStreamIdRef.current;
       if (streamId) {
         fetch(`${HTTP_BASE}/api/streams/stop`, {
@@ -614,11 +610,10 @@ export default function Home() {
       }
     }
 
-    sendStreamViewerLeave();
-
     closeAllStreamPeers();
     clearStreamViewers();
-    setStreamRemoteMedia(null);
+    setStreamPlaybackUrl(null);
+    setStreamObsConfig(null);
     setKnownStreamHostId(null);
     setStreamMode("idle");
 
@@ -731,7 +726,6 @@ export default function Home() {
     if (payload.kind === "peer.leave") {
       if (payload.role === "host" && fromUserId === knownStreamHostIdRef.current) {
         closeStreamPeer(fromUserId);
-        setStreamRemoteMedia(null);
         setKnownStreamHostId(null);
         setStreamMode("idle");
         setStatusNote("Host left the stream.");
@@ -748,7 +742,6 @@ export default function Home() {
     if (payload.kind === "stream.status") {
       if (!payload.is_live && fromUserId === knownStreamHostIdRef.current) {
         closeStreamPeer(fromUserId);
-        setStreamRemoteMedia(null);
         setStreamMode("idle");
       }
       await fetchStreams();
@@ -873,16 +866,6 @@ export default function Home() {
     socket.onopen = () => {
       setSignalSocketState("connected");
 
-      if (activeRoom?.kind === "stream") {
-        const isHosting = streamModeRef.current === "hosting";
-        sendSignal({
-          kind: "peer.announce",
-          mode: "stream",
-          role: isHosting ? "host" : "viewer",
-          target_user_id: isHosting ? undefined : (knownStreamHostIdRef.current ?? undefined),
-        });
-      }
-
       if (activeRoom?.kind === "video" && videoJoinedRef.current) {
         sendSignal({
           kind: "peer.announce",
@@ -945,19 +928,49 @@ export default function Home() {
   }, [activeRoomId, activeRoom?.kind, hydrated, isAuthenticated, userId, sessionToken]);
 
   useEffect(() => {
-    if (streamLocalVideoRef.current) {
-      streamLocalVideoRef.current.srcObject = streamLocalMedia;
+    const element = streamRemoteVideoRef.current;
+    if (!element) {
+      return;
     }
-    if (streamPreviewVideoRef.current) {
-      streamPreviewVideoRef.current.srcObject = streamLocalMedia;
-    }
-  }, [streamLocalMedia]);
 
-  useEffect(() => {
-    if (streamRemoteVideoRef.current) {
-      streamRemoteVideoRef.current.srcObject = streamRemoteMedia;
+    if (!streamPlaybackUrl) {
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+      return;
     }
-  }, [streamRemoteMedia]);
+
+    let hls: Hls | null = null;
+
+    if (element.canPlayType("application/vnd.apple.mpegurl")) {
+      element.src = streamPlaybackUrl;
+      element.play().catch(() => {
+        // Ignore autoplay restrictions.
+      });
+    } else if (Hls.isSupported()) {
+      hls = new Hls({
+        lowLatencyMode: true,
+      });
+      hls.loadSource(streamPlaybackUrl);
+      hls.attachMedia(element);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        element.play().catch(() => {
+          // Ignore autoplay restrictions.
+        });
+      });
+    } else {
+      setStatusNote("This browser does not support HLS playback.");
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+    };
+  }, [streamPlaybackUrl]);
 
   useEffect(() => {
     if (videoLocalVideoRef.current) {
@@ -1009,14 +1022,45 @@ export default function Home() {
   }
 
   const liveStreams = useMemo(() => streams.filter((stream) => stream.live), [streams]);
+  const liveStreamForActiveRoom = useMemo(() => {
+    if (!activeRoom || activeRoom.kind !== "stream") {
+      return null;
+    }
+    return liveStreams.find((stream) => stream.room_id === activeRoom.id) ?? null;
+  }, [activeRoom, liveStreams]);
+
+  const streamObsIngestPreview = useMemo(() => {
+    const server = streamObsServerDraft.trim();
+    const streamKey = streamObsKeyDraft.trim();
+
+    if (server.length > 0 && streamKey.length > 0) {
+      return `${server.replace(/\/+$/, "")}/${streamKey}`;
+    }
+
+    return streamObsConfig?.ingest_url ?? null;
+  }, [streamObsConfig, streamObsKeyDraft, streamObsServerDraft]);
 
   useEffect(() => {
     if (!activeRoom || activeRoom.kind !== "stream") {
+      setStreamPlaybackUrl(null);
       return;
     }
 
     const streamForRoom = liveStreams.find((stream) => stream.room_id === activeRoom.id);
     setKnownStreamHostId(streamForRoom?.host_user_id ?? null);
+    setStreamPlaybackUrl(streamForRoom?.playback_url ?? null);
+
+    if (streamForRoom) {
+      setStreamTitleDraft(streamForRoom.title);
+      if (streamModeRef.current !== "hosting") {
+        setStreamMode("watching");
+      }
+      return;
+    }
+
+    if (streamModeRef.current !== "hosting") {
+      setStreamMode("idle");
+    }
   }, [activeRoom, liveStreams]);
 
   const roomNameById = useMemo(() => {
@@ -1084,14 +1128,18 @@ export default function Home() {
           <div className="shrink-0">
             <StreamExperience
               knownStreamHostId={knownStreamHostId}
-              onFindStream={() =>
-                sendSignal({
-                  kind: "peer.announce",
-                  mode: "stream",
-                  role: "viewer",
-                  target_user_id: knownStreamHostId ?? undefined,
-                })
-              }
+              liveStreamTitle={liveStreamForActiveRoom?.title ?? null}
+              obsConfig={streamObsConfig}
+              obsIngestPreview={streamObsIngestPreview}
+              obsServerDraft={streamObsServerDraft}
+              obsStreamKeyDraft={streamObsKeyDraft}
+              onFindStream={() => {
+                fetchStreams().catch(() => {
+                  setStatusNote("Could not refresh streams.");
+                });
+              }}
+              onObsServerDraftChange={setStreamObsServerDraft}
+              onObsStreamKeyDraftChange={setStreamObsKeyDraft}
               onStartBroadcast={() => {
                 startBroadcast().catch(() => {
                   setStatusNote("Failed to start broadcast.");
@@ -1103,10 +1151,9 @@ export default function Home() {
                 });
               }}
               onStreamTitleDraftChange={setStreamTitleDraft}
-              streamLocalVideoRef={streamLocalVideoRef}
               streamMode={streamMode}
-              streamPreviewVideoRef={streamPreviewVideoRef}
-              streamRemoteVideoRef={streamRemoteVideoRef}
+              streamPlaybackUrl={streamPlaybackUrl}
+              streamPlaybackVideoRef={streamRemoteVideoRef}
               streamTitleDraft={streamTitleDraft}
               streamViewerCount={streamViewerIds.length}
             />

@@ -9,16 +9,35 @@ pub const StreamService = struct {
         return .{ .state = state, .allocator = allocator };
     }
 
-    pub fn startStream(self: *StreamService, room_id: []const u8, host_user_id: []const u8, title: []const u8) !store.StreamSession {
+    pub fn startStream(
+        self: *StreamService,
+        room_id: []const u8,
+        host_user_id: []const u8,
+        title: []const u8,
+        stream_key: []const u8,
+        ingest_server_url: []const u8,
+        playback_url: []const u8,
+    ) !store.StreamSession {
         const stream = store.StreamSession{
             .id = try self.state.nextStreamId(self.allocator),
             .room_id = try self.allocator.dupe(u8, room_id),
             .host_user_id = try self.allocator.dupe(u8, host_user_id),
             .title = try self.allocator.dupe(u8, title),
+            .stream_key = try self.allocator.dupe(u8, stream_key),
+            .ingest_server_url = try self.allocator.dupe(u8, ingest_server_url),
+            .playback_url = try self.allocator.dupe(u8, playback_url),
             .live = true,
         };
         try self.state.streams.append(self.allocator, stream);
         return stream;
+    }
+
+    pub fn stopLiveStreamsInRoom(self: *StreamService, room_id: []const u8) void {
+        for (self.state.streams.items) |*stream| {
+            if (std.mem.eql(u8, stream.room_id, room_id) and stream.live) {
+                stream.live = false;
+            }
+        }
     }
 
     pub fn stopStream(self: *StreamService, stream_id: []const u8) !void {
@@ -38,9 +57,17 @@ test "startStream creates live stream and stopStream flips it offline" {
 
     var streams = StreamService.init(&state, std.testing.allocator);
 
-    const stream = try streams.startStream("room-7", "host-1", "Launch Party");
+    const stream = try streams.startStream(
+        "room-7",
+        "host-1",
+        "Launch Party",
+        "key-1",
+        "rtmp://localhost:1935/live",
+        "http://localhost:8888/live/key-1/index.m3u8",
+    );
     try std.testing.expectEqualStrings("stream-1", stream.id);
     try std.testing.expect(stream.live);
+    try std.testing.expectEqualStrings("key-1", stream.stream_key);
 
     try streams.stopStream(stream.id);
     try std.testing.expect(!state.streams.items[0].live);
@@ -52,4 +79,32 @@ test "stopStream returns StreamNotFound for unknown stream id" {
 
     var streams = StreamService.init(&state, std.testing.allocator);
     try std.testing.expectError(error.StreamNotFound, streams.stopStream("stream-404"));
+}
+
+test "stopLiveStreamsInRoom marks matching streams offline" {
+    var state = store.State.init(std.testing.allocator);
+    defer state.deinit(std.testing.allocator);
+
+    var streams = StreamService.init(&state, std.testing.allocator);
+    _ = try streams.startStream(
+        "room-1",
+        "host-1",
+        "Room One",
+        "key-1",
+        "rtmp://localhost:1935/live",
+        "http://localhost:8888/live/key-1/index.m3u8",
+    );
+    _ = try streams.startStream(
+        "room-2",
+        "host-2",
+        "Room Two",
+        "key-2",
+        "rtmp://localhost:1935/live",
+        "http://localhost:8888/live/key-2/index.m3u8",
+    );
+
+    streams.stopLiveStreamsInRoom("room-1");
+
+    try std.testing.expect(!state.streams.items[0].live);
+    try std.testing.expect(state.streams.items[1].live);
 }

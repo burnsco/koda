@@ -37,7 +37,7 @@ make run-local
 - `GET /api/messages?room_id=<id>`
 - `POST /api/messages` with `{ "room_id": "...", "user_id": "...", "body": "..." }`
 - `GET /api/streams`
-- `POST /api/streams` with `{ "room_id": "...", "user_id": "...", "title": "..." }`
+- `POST /api/streams` with `{ "room_id": "...", "title": "..." }` (auth required, returns OBS server URL + stream key)
 - `POST /api/streams/stop` with `{ "stream_id": "..." }`
 - WebSocket: `ws://localhost:8080/ws/chat?room_id=<id>&user_id=<id>`
 - WebSocket: `ws://localhost:8080/ws/signal?room_id=<id>&user_id=<id>`
@@ -63,6 +63,18 @@ make check
 ```bash
 docker compose up --build
 ```
+
+Streaming ports:
+
+- RTMP ingest (OBS): `rtmp://localhost:1935/live`
+- HLS playback: `http://localhost:8888/live/<stream-key>/index.m3u8`
+
+OBS setup:
+
+1. Open a `stream` room and click `Go Live (OBS)`.
+2. Copy the returned `Server` and `Stream key` from the stream panel.
+3. In OBS: `Settings -> Stream -> Service: Custom`, then paste Server + Stream Key.
+4. Start streaming in OBS; viewers in the room play the HLS feed.
 
 ## CI
 

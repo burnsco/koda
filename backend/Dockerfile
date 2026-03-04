@@ -23,5 +23,7 @@ EXPOSE 8080
 ENV KODA_HOST=0.0.0.0
 ENV KODA_PORT=8080
 ENV KODA_CORS_ORIGIN=http://localhost:3000
+ENV KODA_MEDIA_RTMP_BASE_URL=rtmp://localhost:1935/live
+ENV KODA_MEDIA_HLS_BASE_URL=http://localhost:8888/live
 
 CMD ["/usr/local/bin/koda-backend"]
