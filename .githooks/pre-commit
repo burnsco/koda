@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if command -v rg >/dev/null 2>&1; then
+  mapfile -t FRONTEND_BIOME_FILES < <(
+    git diff --cached --name-only --diff-filter=ACMR \
+      | rg '^frontend/.*\.(js|jsx|ts|tsx|json|jsonc|css)$' \
+      | sed 's#^frontend/##'
+  )
+else
+  mapfile -t FRONTEND_BIOME_FILES < <(
+    git diff --cached --name-only --diff-filter=ACMR \
+      | grep -E '^frontend/.*\.(js|jsx|ts|tsx|json|jsonc|css)$' \
+      | sed 's#^frontend/##'
+  )
+fi
+
+if [ ${#FRONTEND_BIOME_FILES[@]} -gt 0 ]; then
+  echo "Running Biome pre-check on staged frontend files..."
+  (cd frontend && bunx biome check --error-on-warnings "${FRONTEND_BIOME_FILES[@]}")
+fi
+
 make lint
 make format-check

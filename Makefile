@@ -3,7 +3,7 @@ SHELL := /usr/bin/env bash
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
 
-.PHONY: run up down dev run-local backend frontend install setup-hooks lint format format-check test build check smoke
+.PHONY: run up down dev run-local backend frontend install setup-hooks lint format format-check biome-precheck test build check smoke
 
 run:
 	docker compose up --build
@@ -100,6 +100,11 @@ format:
 format-check:
 	cd $(FRONTEND_DIR) && bun run format:check
 	cd $(BACKEND_DIR) && zig fmt --check build.zig src && zig fmt --check --zon build.zig.zon
+
+biome-precheck:
+	@set -euo pipefail; \
+	FILE_PATH="$${FILE:-.}"; \
+	cd $(FRONTEND_DIR) && bunx biome check --error-on-warnings "$$FILE_PATH"
 
 test:
 	cd $(BACKEND_DIR) && zig build test
