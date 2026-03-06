@@ -1,4 +1,4 @@
-import { Check, Copy, Eye, Radio, Search, StopCircle, User } from "lucide-react";
+import { Check, Copy, Eye, Radio, Search, StopCircle, User, Video } from "lucide-react";
 import { type RefObject, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,25 +11,36 @@ type StreamExperienceProps = {
   knownStreamHostId: string | null;
   liveStreamTitle: string | null;
   obsConfig: StreamObsConfig | null;
+  obsIngestPreview: string | null;
   obsServerDraft: string;
   obsStreamKeyDraft: string;
   onFindStream: () => void;
+  onObsServerDraftChange: (value: string) => void;
+  onObsStreamKeyDraftChange: (value: string) => void;
+  onStartBroadcast: () => void;
   onStopBroadcast: () => void;
   streamMode: "idle" | "hosting" | "watching";
   streamPlaybackUrl: string | null;
   streamPlaybackVideoRef: RefObject<HTMLVideoElement | null>;
   streamTitleDraft: string;
   streamViewerCount: number;
+  devMode?: boolean;
   onStreamTitleDraftChange: (title: string) => void;
 };
+
+const DEFAULT_DEV_INGEST = "rtmp://localhost:1935/live";
 
 export function StreamExperience({
   knownStreamHostId,
   liveStreamTitle,
   obsConfig,
+  obsIngestPreview,
   obsServerDraft,
   obsStreamKeyDraft,
   onFindStream,
+  onObsServerDraftChange,
+  onObsStreamKeyDraftChange,
+  onStartBroadcast,
   onStopBroadcast,
   onStreamTitleDraftChange,
   streamMode,
@@ -37,8 +48,10 @@ export function StreamExperience({
   streamPlaybackVideoRef,
   streamTitleDraft,
   streamViewerCount,
+  devMode = false,
 }: StreamExperienceProps) {
   const isHosting = streamMode === "hosting";
+  const isIdle = streamMode === "idle";
   const hasLiveStream = Boolean(streamPlaybackUrl);
   const [copiedField, setCopiedField] = useState<"server" | "key" | "ingest" | null>(null);
 
@@ -139,6 +152,93 @@ export function StreamExperience({
             </div>
           )}
         </div>
+
+        {isIdle && (
+          <div className="grid gap-3 mt-4 pt-3 border-t border-border/30">
+            <div className="grid gap-1.5">
+              <label htmlFor="streamTitleIdle" className="section-label">
+                Broadcast title
+              </label>
+              <Input
+                id="streamTitleIdle"
+                placeholder="e.g. My stream"
+                value={streamTitleDraft}
+                onChange={(e) => onStreamTitleDraftChange(e.target.value)}
+                className="h-8 text-xs bg-muted/40 border-border/40 focus-visible:ring-primary/40 rounded-lg"
+              />
+            </div>
+            {devMode && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <label htmlFor="obsServerIdle" className="section-label">
+                      OBS Server
+                    </label>
+                    <Input
+                      id="obsServerIdle"
+                      placeholder={DEFAULT_DEV_INGEST}
+                      value={obsServerDraft}
+                      onChange={(e) => onObsServerDraftChange(e.target.value)}
+                      className="h-8 text-xs bg-muted/40 border-border/40 font-mono rounded-lg"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="obsKeyIdle" className="section-label">
+                      OBS Stream key
+                    </label>
+                    <Input
+                      id="obsKeyIdle"
+                      type="password"
+                      placeholder="Leave blank for auto-generated"
+                      value={obsStreamKeyDraft}
+                      onChange={(e) => onObsStreamKeyDraftChange(e.target.value)}
+                      className="h-8 text-xs bg-muted/40 border-border/40 font-mono rounded-lg"
+                    />
+                  </div>
+                </div>
+                {obsIngestPreview && (
+                  <div className="grid gap-1.5">
+                    <span className="section-label">Ingest URL</span>
+                    <div className="flex gap-1.5">
+                      <Input
+                        readOnly
+                        value={obsIngestPreview}
+                        className="h-8 text-xs bg-muted/30 border-border/30 rounded-lg text-muted-foreground font-mono"
+                      />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 shrink-0 rounded-lg border-border/30"
+                        onClick={() => handleCopy(obsIngestPreview, "ingest")}
+                      >
+                        {copiedField === "ingest" ? (
+                          <Check size={14} className="text-emerald-500" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex items-center justify-between pt-1">
+              <p className="text-[10px] text-muted-foreground/60 font-medium">
+                {devMode
+                  ? "Set server/key for a custom ingest, or leave blank to use default."
+                  : "Start a broadcast to get OBS server and stream key."}
+              </p>
+              <Button
+                size="sm"
+                onClick={onStartBroadcast}
+                className="h-8 text-[11px] font-bold uppercase tracking-wider rounded-lg px-4"
+              >
+                <Video size={14} className="mr-1.5" />
+                Go Live (OBS)
+              </Button>
+            </div>
+          </div>
+        )}
 
         {isHosting && (
           <div className="grid gap-3 mt-4 pt-3 border-t border-border/30">

@@ -1400,6 +1400,7 @@ export default function Home() {
         {activeRoom?.kind === "stream" ? (
           <div className="shrink-0">
             <StreamExperience
+              devMode={process.env.NODE_ENV === "development"}
               knownStreamHostId={knownStreamHostId}
               liveStreamTitle={liveStreamForActiveRoom?.title ?? null}
               obsConfig={streamObsConfig}
