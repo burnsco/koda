@@ -24,7 +24,6 @@ type StreamExperienceProps = {
   streamPlaybackVideoRef: RefObject<HTMLVideoElement | null>;
   streamTitleDraft: string;
   streamViewerCount: number;
-  devMode?: boolean;
   onStreamTitleDraftChange: (title: string) => void;
 };
 
@@ -48,7 +47,6 @@ export function StreamExperience({
   streamPlaybackVideoRef,
   streamTitleDraft,
   streamViewerCount,
-  devMode = false,
 }: StreamExperienceProps) {
   const isHosting = streamMode === "hosting";
   const isIdle = streamMode === "idle";
@@ -77,7 +75,7 @@ export function StreamExperience({
   }
 
   return (
-    <Card className="bg-card/40 border-border/40 backdrop-blur-xl overflow-hidden rounded-xl shadow-sm animate-in">
+    <Card className="overflow-hidden shadow-sm bg-card/40 border-border/40 backdrop-blur-xl rounded-xl animate-in">
       <CardHeader className="flex flex-col gap-3 p-4 pb-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -89,7 +87,7 @@ export function StreamExperience({
             >
               <Radio size={16} className={hasLiveStream ? "animate-pulse" : ""} />
             </div>
-            <CardTitle className="text-base font-bold tracking-tight uppercase tracking-[0.05em]">
+            <CardTitle className="text-base font-bold tracking-tight uppercase">
               {isHosting ? "Live Broadcast" : "Stream Discovery"}
             </CardTitle>
           </div>
@@ -114,16 +112,16 @@ export function StreamExperience({
 
         {liveStreamTitle && (
           <div className="flex items-center gap-1.5 px-0.5">
-            <span className="text-xs font-bold text-foreground truncate">{liveStreamTitle}</span>
+            <span className="text-xs font-bold truncate text-foreground">{liveStreamTitle}</span>
           </div>
         )}
       </CardHeader>
 
       <CardContent className="p-4 pt-2">
-        <div className="relative aspect-video bg-black/40 rounded-xl overflow-hidden border border-border/40 group">
+        <div className="relative overflow-hidden border aspect-video bg-black/40 rounded-xl border-border/40 group">
           <video
             ref={streamPlaybackVideoRef}
-            className="h-full w-full object-cover"
+            className="object-cover w-full h-full"
             autoPlay
             playsInline
             muted={isHosting}
@@ -131,9 +129,9 @@ export function StreamExperience({
 
           {!hasLiveStream && !isHosting && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/40 backdrop-blur-[2px] gap-3">
-              <Radio className="h-10 w-10 text-muted-foreground/30" />
-              <div className="text-center px-4">
-                <p className="text-sm font-bold text-muted-foreground/60 uppercase tracking-widest">
+              <Radio className="w-10 h-10 text-muted-foreground/30" />
+              <div className="px-4 text-center">
+                <p className="text-sm font-bold tracking-widest uppercase text-muted-foreground/60">
                   Signal is offline
                 </p>
                 <p className="text-[11px] text-muted-foreground/40 font-medium">
@@ -154,7 +152,7 @@ export function StreamExperience({
         </div>
 
         {isIdle && (
-          <div className="grid gap-3 mt-4 pt-3 border-t border-border/30">
+          <div className="grid gap-3 pt-3 mt-4 border-t border-border/30">
             <div className="grid gap-1.5">
               <label htmlFor="streamTitleIdle" className="section-label">
                 Broadcast title
@@ -164,69 +162,63 @@ export function StreamExperience({
                 placeholder="e.g. My stream"
                 value={streamTitleDraft}
                 onChange={(e) => onStreamTitleDraftChange(e.target.value)}
-                className="h-8 text-xs bg-muted/40 border-border/40 focus-visible:ring-primary/40 rounded-lg"
+                className="h-8 text-xs rounded-lg bg-muted/40 border-border/40 focus-visible:ring-primary/40"
               />
             </div>
-            {devMode && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5">
-                    <label htmlFor="obsServerIdle" className="section-label">
-                      OBS Server
-                    </label>
-                    <Input
-                      id="obsServerIdle"
-                      placeholder={DEFAULT_DEV_INGEST}
-                      value={obsServerDraft}
-                      onChange={(e) => onObsServerDraftChange(e.target.value)}
-                      className="h-8 text-xs bg-muted/40 border-border/40 font-mono rounded-lg"
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <label htmlFor="obsKeyIdle" className="section-label">
-                      OBS Stream key
-                    </label>
-                    <Input
-                      id="obsKeyIdle"
-                      type="password"
-                      placeholder="Leave blank for auto-generated"
-                      value={obsStreamKeyDraft}
-                      onChange={(e) => onObsStreamKeyDraftChange(e.target.value)}
-                      className="h-8 text-xs bg-muted/40 border-border/40 font-mono rounded-lg"
-                    />
-                  </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <label htmlFor="obsServerIdle" className="section-label">
+                  OBS Server
+                </label>
+                <Input
+                  id="obsServerIdle"
+                  placeholder={DEFAULT_DEV_INGEST}
+                  value={obsServerDraft}
+                  onChange={(e) => onObsServerDraftChange(e.target.value)}
+                  className="h-8 font-mono text-xs rounded-lg bg-muted/40 border-border/40"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <label htmlFor="obsKeyIdle" className="section-label">
+                  OBS Stream key
+                </label>
+                <Input
+                  id="obsKeyIdle"
+                  type="password"
+                  placeholder="Leave blank for auto-generated"
+                  value={obsStreamKeyDraft}
+                  onChange={(e) => onObsStreamKeyDraftChange(e.target.value)}
+                  className="h-8 font-mono text-xs rounded-lg bg-muted/40 border-border/40"
+                />
+              </div>
+            </div>
+            {obsIngestPreview && (
+              <div className="grid gap-1.5">
+                <span className="section-label">Ingest URL</span>
+                <div className="flex gap-1.5">
+                  <Input
+                    readOnly
+                    value={obsIngestPreview}
+                    className="h-8 font-mono text-xs rounded-lg bg-muted/30 border-border/30 text-muted-foreground"
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="w-8 h-8 rounded-lg shrink-0 border-border/30"
+                    onClick={() => handleCopy(obsIngestPreview, "ingest")}
+                  >
+                    {copiedField === "ingest" ? (
+                      <Check size={14} className="text-emerald-500" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </Button>
                 </div>
-                {obsIngestPreview && (
-                  <div className="grid gap-1.5">
-                    <span className="section-label">Ingest URL</span>
-                    <div className="flex gap-1.5">
-                      <Input
-                        readOnly
-                        value={obsIngestPreview}
-                        className="h-8 text-xs bg-muted/30 border-border/30 rounded-lg text-muted-foreground font-mono"
-                      />
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-8 w-8 shrink-0 rounded-lg border-border/30"
-                        onClick={() => handleCopy(obsIngestPreview, "ingest")}
-                      >
-                        {copiedField === "ingest" ? (
-                          <Check size={14} className="text-emerald-500" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
+              </div>
             )}
             <div className="flex items-center justify-between pt-1">
               <p className="text-[10px] text-muted-foreground/60 font-medium">
-                {devMode
-                  ? "Set server/key for a custom ingest, or leave blank to use default."
-                  : "Start a broadcast to get OBS server and stream key."}
+                Set server/key for a custom ingest, or leave blank to auto-generate.
               </p>
               <Button
                 size="sm"
@@ -241,7 +233,7 @@ export function StreamExperience({
         )}
 
         {isHosting && (
-          <div className="grid gap-3 mt-4 pt-3 border-t border-border/30">
+          <div className="grid gap-3 pt-3 mt-4 border-t border-border/30">
             <div className="grid gap-1.5">
               <label htmlFor="streamTitle" className="section-label">
                 Broadcast Details
@@ -251,7 +243,7 @@ export function StreamExperience({
                 placeholder="Set stream title..."
                 value={streamTitleDraft}
                 onChange={(e) => onStreamTitleDraftChange(e.target.value)}
-                className="h-8 text-xs bg-muted/40 border-border/40 focus-visible:ring-primary/40 rounded-lg"
+                className="h-8 text-xs rounded-lg bg-muted/40 border-border/40 focus-visible:ring-primary/40"
               />
             </div>
 
@@ -265,12 +257,12 @@ export function StreamExperience({
                     id="obsServer"
                     readOnly
                     value={serverValue}
-                    className="h-8 text-xs bg-muted/30 border-border/30 rounded-lg text-muted-foreground font-mono"
+                    className="h-8 font-mono text-xs rounded-lg bg-muted/30 border-border/30 text-muted-foreground"
                   />
                   <Button
                     size="icon"
                     variant="outline"
-                    className="h-8 w-8 shrink-0 rounded-lg border-border/30"
+                    className="w-8 h-8 rounded-lg shrink-0 border-border/30"
                     onClick={() => handleCopy(serverValue, "server")}
                   >
                     {copiedField === "server" ? (
@@ -291,12 +283,12 @@ export function StreamExperience({
                     readOnly
                     type="password"
                     value={streamKeyValue}
-                    className="h-8 text-xs bg-muted/30 border-border/30 rounded-lg text-muted-foreground font-mono"
+                    className="h-8 font-mono text-xs rounded-lg bg-muted/30 border-border/30 text-muted-foreground"
                   />
                   <Button
                     size="icon"
                     variant="outline"
-                    className="h-8 w-8 shrink-0 rounded-lg border-border/30"
+                    className="w-8 h-8 rounded-lg shrink-0 border-border/30"
                     onClick={() => handleCopy(streamKeyValue, "key")}
                   >
                     {copiedField === "key" ? (

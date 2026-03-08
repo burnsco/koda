@@ -68,27 +68,10 @@ pub const KodaServer = struct {
 
         var rooms = self.app.roomService();
         const lobby = try rooms.createRoom("lobby", .text);
-        const stage = try rooms.createRoom("stage", .stream);
+        _ = try rooms.createRoom("stage", .stream);
 
         var chat = self.app.chatService();
         _ = try chat.sendMessage(lobby.id, "system", "Koda backend is online.");
-
-        var streams = self.app.streamService();
-        const seed_key = try self.generateStreamKey();
-        defer self.allocator.free(seed_key);
-        const seed_playback_url = try self.buildPlaybackUrl(seed_key);
-        defer self.allocator.free(seed_playback_url);
-        _ = try streams.startStream(
-            stage.id,
-            "system",
-            "Welcome to Koda",
-            seed_key,
-            self.config.media_rtmp_base_url,
-            seed_playback_url,
-        );
-
-        var voice = self.app.voiceService();
-        try voice.joinVoice(stage.id, "system");
     }
 
     fn acceptConnection(self: *KodaServer, connection: std.net.Server.Connection) void {
