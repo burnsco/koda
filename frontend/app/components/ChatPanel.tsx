@@ -1,5 +1,5 @@
 import { Send } from "lucide-react";
-import { type FormEvent, useEffect, useRef } from "react";
+import { type FormEvent, memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ type ChatPanelProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-export function ChatPanel({
+export const ChatPanel = memo(function ChatPanel({
   canChat,
   currentUserId,
   currentUsername,
@@ -27,11 +27,18 @@ export function ChatPanel({
   onSubmit,
 }: ChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const previousMessageCountRef = useRef(0);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length === 0) {
+      previousMessageCountRef.current = 0;
+      return;
     }
+
+    bottomRef.current?.scrollIntoView({
+      behavior: previousMessageCountRef.current === 0 ? "auto" : "smooth",
+    });
+    previousMessageCountRef.current = messages.length;
   }, [messages]);
 
   return (
@@ -94,4 +101,6 @@ export function ChatPanel({
       </form>
     </section>
   );
-}
+});
+
+ChatPanel.displayName = "ChatPanel";

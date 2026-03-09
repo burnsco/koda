@@ -1,5 +1,5 @@
 import { Check, Copy, Eye, Radio, Search, StopCircle, User, Video } from "lucide-react";
-import { type RefObject, useState } from "react";
+import { memo, type RefObject, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,7 @@ type StreamExperienceProps = {
 
 const DEFAULT_DEV_INGEST = "rtmp://localhost:1935/live";
 
-export function StreamExperience({
+export const StreamExperience = memo(function StreamExperience({
   knownStreamHostId,
   liveStreamTitle,
   obsConfig,
@@ -325,4 +325,6 @@ export function StreamExperience({
       </CardContent>
     </Card>
   );
-}
+});
+
+StreamExperience.displayName = "StreamExperience";

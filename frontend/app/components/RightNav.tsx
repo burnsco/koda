@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,7 @@ function StatusRow({ state, label }: { state: string | boolean; label: string })
   );
 }
 
-export function RightNav({
+export const RightNav = memo(function RightNav({
   backendHealthy,
   chatSocketState,
   signalSocketState,
@@ -122,4 +123,6 @@ export function RightNav({
       </div>
     </aside>
   );
-}
+});
+
+RightNav.displayName = "RightNav";

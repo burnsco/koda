@@ -1,7 +1,7 @@
 "use client";
 
 import { Hash, MessageSquare, Plus, Radio, Video } from "lucide-react";
-import { type ComponentType, type FormEvent, useState } from "react";
+import { type ComponentType, type FormEvent, memo, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ type RoomSidebarProps = {
   tab: BrowseTab;
 };
 
-export function RoomSidebar({
+export const RoomSidebar = memo(function RoomSidebar({
   activeRoomId,
   liveStreams,
   onCreateRoom,
@@ -59,17 +59,27 @@ export function RoomSidebar({
 }: RoomSidebarProps) {
   const [createOpen, setCreateOpen] = useState(false);
 
-  const liveRoomIds = new Set(liveStreams.map((s) => s.room_id));
+  const liveRoomIds = useMemo(
+    () => new Set(liveStreams.map((stream) => stream.room_id)),
+    [liveStreams],
+  );
 
-  const visibleRooms = rooms.filter((room) => {
-    if (tab === "all") return true;
-    if (tab === "live") return room.kind === "stream" && liveRoomIds.has(room.id);
-    if (tab === "video") return room.kind === "video";
-    if (tab === "text") return room.kind === "text" || room.kind === "voice";
-    return true;
-  });
+  const visibleRooms = useMemo(
+    () =>
+      rooms.filter((room) => {
+        if (tab === "all") return true;
+        if (tab === "live") return room.kind === "stream" && liveRoomIds.has(room.id);
+        if (tab === "video") return room.kind === "video";
+        if (tab === "text") return room.kind === "text" || room.kind === "voice";
+        return true;
+      }),
+    [liveRoomIds, rooms, tab],
+  );
 
-  const visibleStreams = tab === "all" || tab === "live" ? liveStreams : [];
+  const visibleStreams = useMemo(
+    () => (tab === "all" || tab === "live" ? liveStreams : []),
+    [liveStreams, tab],
+  );
 
   return (
     <aside className="left-panel animate-in" style={{ animationDelay: "50ms" }}>
@@ -300,4 +310,6 @@ export function RoomSidebar({
       </div>
     </aside>
   );
-}
+});
+
+RoomSidebar.displayName = "RoomSidebar";

@@ -8,9 +8,9 @@ describe("AuthModal", () => {
   it("starts in login mode", () => {
     render(<AuthModal onClose={() => {}} onSuccess={() => {}} />);
 
-    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Welcome" })).toBeVisible();
     expect(screen.queryByPlaceholderText("Username")).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Confirm password")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Confirm Password")).not.toBeInTheDocument();
   });
 
   it("switches to register mode", async () => {
@@ -18,7 +18,7 @@ describe("AuthModal", () => {
     render(<AuthModal onClose={() => {}} onSuccess={() => {}} />);
     await user.click(screen.getByRole("tab", { name: "Sign up" }));
 
-    expect(screen.getByRole("heading", { name: "Create account" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Join Punch" })).toBeVisible();
     expect(screen.getByLabelText("Username")).toBeVisible();
     expect(screen.getByLabelText("Confirm Password")).toBeVisible();
   });

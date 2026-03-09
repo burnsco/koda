@@ -1,4 +1,5 @@
 import { ChevronDown, LogOut, Settings, UserCircle2, Zap } from "lucide-react";
+import { memo } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,13 @@ type TopNavProps = {
   onLogout: () => void;
 };
 
-export function TopNav({ user, onOpenAuth, onOpenProfile, onOpenSettings, onLogout }: TopNavProps) {
+export const TopNav = memo(function TopNav({
+  user,
+  onOpenAuth,
+  onOpenProfile,
+  onOpenSettings,
+  onLogout,
+}: TopNavProps) {
   const initials = user?.username.slice(0, 2).toUpperCase() ?? "GU";
 
   return (
@@ -108,4 +115,6 @@ export function TopNav({ user, onOpenAuth, onOpenProfile, onOpenSettings, onLogo
       </div>
     </nav>
   );
-}
+});
+
+TopNav.displayName = "TopNav";

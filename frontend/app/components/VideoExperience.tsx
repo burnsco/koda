@@ -1,5 +1,5 @@
 import { Mic, Video, VideoOff } from "lucide-react";
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ type VideoExperienceProps = {
   videoRemoteUserIds: string[];
 };
 
-export function VideoExperience({
+export const VideoExperience = memo(function VideoExperience({
   getRemoteVideoStream,
   onJoinVideoRoom,
   onLeaveVideoRoom,
@@ -132,4 +132,6 @@ export function VideoExperience({
       </CardContent>
     </Card>
   );
-}
+});
+
+VideoExperience.displayName = "VideoExperience";
