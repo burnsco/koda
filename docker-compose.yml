@@ -7,6 +7,11 @@ services:
       - "8888:8888"
     volumes:
       - ./infra/mediamtx.yml:/mediamtx.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8888/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   backend:
     build:
@@ -22,9 +27,15 @@ services:
     volumes:
       - koda_data:/app/data
     depends_on:
-      - media
+      media:
+        condition: service_healthy
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   frontend:
     build:
@@ -38,7 +49,8 @@ services:
       NEXT_PUBLIC_BACKEND_WS_URL: ws://localhost:8080
       NODE_ENV: production
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:3000"
 

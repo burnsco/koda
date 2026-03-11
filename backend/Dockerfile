@@ -14,7 +14,7 @@ RUN zig build -Doptimize=ReleaseSafe
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 curl && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --shell /usr/sbin/nologin koda && mkdir -p /app/data && chown koda:koda /app/data
 COPY --from=build /app/zig-out/bin/koda-backend /usr/local/bin/koda-backend
 

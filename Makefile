@@ -3,7 +3,7 @@ SHELL := /usr/bin/env bash
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
 
-.PHONY: run up down dev run-local backend frontend install setup-hooks lint format format-check biome-precheck test build check smoke
+.PHONY: run up down dev run-local backend frontend install setup-hooks lint format format-check biome-precheck test build check smoke prod deploy logs
 
 run:
 	docker compose up --build
@@ -13,6 +13,14 @@ up:
 
 down:
 	docker compose down
+
+prod:
+	docker compose -f docker-compose.prod.yml up --build -d
+
+deploy: prod
+
+logs:
+	docker compose logs -f
 
 define find_free_port
 	PORT=$(1); \

@@ -8,6 +8,16 @@ services:
       - "8888"
     volumes:
       - ./infra/mediamtx.yml:/mediamtx.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8888/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -24,9 +34,20 @@ services:
     volumes:
       - koda_data:/app/data
     depends_on:
-      - media
+      media:
+        condition: service_healthy
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -41,17 +62,36 @@ services:
       NEXT_PUBLIC_BACKEND_WS_URL: wss://${API_DOMAIN}
       NODE_ENV: production
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   proxy:
     image: caddy:2.8.4
     restart: unless-stopped
     depends_on:
-      - frontend
-      - backend
-      - media
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      media:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       API_DOMAIN: ${API_DOMAIN}
@@ -64,6 +104,11 @@ services:
       - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   koda_data:

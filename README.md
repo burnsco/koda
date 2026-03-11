@@ -76,6 +76,32 @@ OBS setup:
 3. In OBS: `Settings -> Stream -> Service: Custom`, then paste Server + Stream Key.
 4. Start streaming in OBS; viewers in the room play the HLS feed.
 
+## Deployment
+
+Koda is fully dockerized for production using Docker Compose and Caddy for SSL.
+
+1. Copy `.env.example` to `.env` and fill in your domains and email:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your domains
+   ```
+2. Deploy using the Makefile:
+   ```bash
+   make deploy
+   ```
+
+This will:
+- Build the backend and frontend in production mode.
+- Set up Caddy with automatic SSL (Let's Encrypt).
+- Configure MediaMTX for RTMP and HLS streaming.
+- Enable health checks and log rotation for all services.
+
+The production setup uses:
+- `APP_DOMAIN`: Main frontend (e.g., `koda.example.com`)
+- `API_DOMAIN`: Backend API (e.g., `api.koda.example.com`)
+- `PLAY_DOMAIN`: HLS Playback (e.g., `play.koda.example.com`)
+- `INGEST_DOMAIN`: RTMP Ingest (e.g., `ingest.example.com`)
+
 ## CI
 
 GitHub Actions runs `make check` on push and pull request.
